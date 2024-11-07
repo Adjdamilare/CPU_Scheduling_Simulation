@@ -1,15 +1,15 @@
-CPU Scheduling Simulator
+# CPU Scheduling Simulator
 An interactive web-based simulation tool demonstrating various CPU scheduling algorithms used in operating systems. This simulator provides visual representation and performance metrics to help understand different scheduling mechanisms.
 
-#Features
+# Features
 
-##Supported Scheduling Algorithms
+## Supported Scheduling Algorithms
 First Come First Serve (FCFS)
 Shortest Job First (SJF)
 Priority Scheduling
 Round Robin (RR)
 
-##Process Management
+## Process Management
 Configure up to 10 processes
 Customize process parameters:
 Burst Time
@@ -17,7 +17,7 @@ Arrival Time
 Priority Level
 Random process generation option
 
-##Real-time Visualization
+## Real-time Visualization
 Interactive Gantt chart
 Process state visualization (Running, Ready, Waiting)
 Dynamic simulation updates
@@ -27,13 +27,13 @@ Turnaround Time
 Waiting Time
 Automated average calculations
 
-##User Interface
+## User Interface
 Responsive Bootstrap design
 Real-time simulation feedback
 Intuitive process configuration
 Mobile-friendly layout
 
-##Getting Started
+## Getting Started
 Clone the repository
 Open index.html in a web browser
 Configure processes or use auto-generated values
