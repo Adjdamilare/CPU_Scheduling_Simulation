@@ -1,0 +1,534 @@
+<!--    Author Adeosun Oluwadamilare Joshua 2024/11/7   -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPU Scheduling Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px 0;
+        }
+        .process-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            margin-bottom: 10px;
+        }
+        .process-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .error-input {
+            border-color: #dc3545;
+            background-color: #fff8f8;
+        }
+        #simulation-area {
+            min-height: 100px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+        .metric-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .gantt-chart {
+            min-height: 60px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        .gantt-block {
+            height: 40px;
+            min-width: 50px;
+            margin-right: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.8rem;
+            position: relative;
+        }
+        .gantt-time {
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            font-size: 0.7rem;
+            color: #666;
+        }
+        .process-state {
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            display: inline-block;
+        }
+        .state-running {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .state-ready {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .state-waiting {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .alert {
+            margin-bottom: 10px;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            .gantt-block {
+                min-width: 40px;
+                font-size: 0.7rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">CPU Scheduling Simulator</h1>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Process Configuration</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Number of Processes (1-10)</label>
+                            <input type="number" id="numProcesses" class="form-control" min="1" max="10" value="3">
+                        </div>
+                        <button id="generateInputs" class="btn btn-primary w-100">Generate Process Inputs</button>
+                        <div id="processInputs" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Algorithm Selection</h5>
+                        <select id="algorithm" class="form-select mb-3">
+                            <option value="fcfs">First Come First Serve (FCFS)</option>
+                            <option value="sjf">Shortest Job First (SJF)</option>
+                            <option value="priority">Priority Scheduling</option>
+                            <option value="rr">Round Robin (RR)</option>
+                        </select>
+                        <div id="algorithmConfig"></div>
+                        <button id="runSimulation" class="btn btn-success w-100 mt-3">Start Simulation</button>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Simulation Progress</h5>
+                        <div id="simulation-area" class="border rounded p-3"></div>
+                        <div id="gantt-chart" class="gantt-chart border rounded"></div>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Results</h5>
+                        <div id="results" class="table-responsive"></div>
+                        <div id="averages" class="row mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class Process {
+            constructor(id, burstTime = 0, arrivalTime = 0, priority = 0) {
+                this.id = id;
+                this.burstTime = burstTime;
+                this.arrivalTime = arrivalTime;
+                this.priority = priority;
+                this.waitingTime = 0;
+                this.turnaroundTime = 0;
+                this.remainingTime = burstTime;
+                this.completionTime = 0;
+                this.startTime = -1;
+            }
+
+            reset() {
+                this.waitingTime = 0;
+                this.turnaroundTime = 0;
+                this.remainingTime = this.burstTime;
+                this.completionTime = 0;
+                this.startTime = -1;
+            }
+        }
+
+        class Scheduler {
+            constructor() {
+                this.processes = [];
+                this.currentTime = 0;
+                this.simulationSpeed = 1000;
+                this.isRunning = false;
+                this.ganttData = [];
+            }
+
+            reset() {
+                this.currentTime = 0;
+                this.ganttData = [];
+                this.processes.forEach(p => p.reset());
+            }
+
+            async run(algorithm, config = {}) {
+                if (this.isRunning) return;
+                this.isRunning = true;
+                this.reset();
+
+                try {
+                    switch(algorithm) {
+                        case 'fcfs': await this.runFCFS(); break;
+                        case 'sjf': await this.runSJF(); break;
+                        case 'priority': await this.runPriority(); break;
+                        case 'rr': await this.runRR(config.timeQuantum); break;
+                    }
+                } catch (error) {
+                    console.error('Simulation error:', error);
+                    this.showError('An error occurred during simulation');
+                } finally {
+                    this.isRunning = false;
+                    this.displayResults();
+                }
+            }
+
+            async runFCFS() {
+                const sortedProcesses = [...this.processes].sort((a, b) => a.arrivalTime - b.arrivalTime);
+                
+                for (const process of sortedProcesses) {
+                    if (this.currentTime < process.arrivalTime) {
+                        this.currentTime = process.arrivalTime;
+                    }
+
+                    process.startTime = this.currentTime;
+                    process.waitingTime = this.currentTime - process.arrivalTime;
+                    
+                    await this.executeProcess(process);
+                    
+                    this.currentTime += process.burstTime;
+                    process.completionTime = this.currentTime;
+                    process.turnaroundTime = process.completionTime - process.arrivalTime;
+                }
+            }
+
+            async runSJF() {
+                const unfinished = [...this.processes];
+                
+                while (unfinished.length > 0) {
+                    const available = unfinished.filter(p => p.arrivalTime <= this.currentTime);
+                    
+                    if (available.length === 0) {
+                        this.currentTime = Math.min(...unfinished.map(p => p.arrivalTime));
+                        continue;
+                    }
+
+                    const shortest = available.reduce((min, p) => 
+                        p.burstTime < min.burstTime ? p : min, available[0]);
+                    
+                    shortest.startTime = this.currentTime;
+                    shortest.waitingTime = this.currentTime - shortest.arrivalTime;
+                    
+                    await this.executeProcess(shortest);
+                    
+                    this.currentTime += shortest.burstTime;
+                    shortest.completionTime = this.currentTime;
+                    shortest.turnaroundTime = shortest.completionTime - shortest.arrivalTime;
+                    
+                    const index = unfinished.indexOf(shortest);
+                    unfinished.splice(index, 1);
+                }
+            }
+
+            async runPriority() {
+                const unfinished = [...this.processes];
+                
+                while (unfinished.length > 0) {
+                    const available = unfinished.filter(p => p.arrivalTime <= this.currentTime);
+                    
+                    if (available.length === 0) {
+                        this.currentTime = Math.min(...unfinished.map(p => p.arrivalTime));
+                        continue;
+                    }
+
+                    const highest = available.reduce((max, p) => 
+                        p.priority > max.priority ? p : max, available[0]);
+                    
+                    highest.startTime = this.currentTime;
+                    highest.waitingTime = this.currentTime - highest.arrivalTime;
+                    
+                    await this.executeProcess(highest);
+                    
+                    this.currentTime += highest.burstTime;
+                    highest.completionTime = this.currentTime;
+                    highest.turnaroundTime = highest.completionTime - highest.arrivalTime;
+                    
+                    const index = unfinished.indexOf(highest);
+                    unfinished.splice(index, 1);
+                }
+            }
+
+            async runRR(timeQuantum) {
+                if (!timeQuantum || timeQuantum <= 0) {
+                    throw new Error('Invalid time quantum');
+                }
+
+                const unfinished = [...this.processes];
+                
+                while (unfinished.length > 0) {
+                    const process = unfinished.shift();
+                    
+                    if (process.arrivalTime > this.currentTime) {
+                        this.currentTime = process.arrivalTime;
+                    }
+
+                    if (process.startTime === -1) {
+                        process.startTime = this.currentTime;
+                    }
+
+                    const executeTime = Math.min(timeQuantum, process.remainingTime);
+                    
+                    await this.executeProcess(process, executeTime);
+                    
+                    this.currentTime += executeTime;
+                    process.remainingTime -= executeTime;
+
+                    if (process.remainingTime > 0) {
+                        unfinished.push(process);
+                    } else {
+                        process.completionTime = this.currentTime;
+                        process.turnaroundTime = process.completionTime - process.arrivalTime;
+                        process.waitingTime = process.turnaroundTime - process.burstTime;
+                    }
+                }
+            }
+
+            async executeProcess(process, duration = process.burstTime) {
+                this.ganttData.push({
+                    processId: process.id,
+                    startTime: this.currentTime,
+                    duration: duration
+                });
+
+                await this.updateUI(process);
+            }
+
+            async updateUI(runningProcess) {
+                const simulationArea = document.getElementById('simulation-area');
+                const ganttChart = document.getElementById('gantt-chart');
+                
+                // Update process states
+                let html = '<div class="process-states">';
+                this.processes.forEach(p => {
+                    let stateClass = 'state-waiting';
+                    let state = 'Waiting';
+                    
+                    if (p === runningProcess) {
+                        stateClass = 'state-running';
+                        state = 'Running';
+                    } else if (p.arrivalTime <= this.currentTime && p.remainingTime > 0) {
+                        stateClass = 'state-ready';
+                        state = 'Ready';
+                    }
+                    
+                    html += `
+                        <div class="process-state ${stateClass}">
+                            P${p.id}: ${state}
+                            ${p.remainingTime > 0 ? ` (Remaining: ${p.remainingTime})` : ''}
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                simulationArea.innerHTML = html;
+
+                // Update Gantt chart
+                ganttChart.innerHTML = '';
+                this.ganttData.forEach(block => {
+                    const div = document.createElement('div');
+                    div.className = 'gantt-block';
+                    div.style.backgroundColor = `hsl(${block.processId * 360/this.processes.length}, 70%, 50%)`;
+                    div.style.width = `${block.duration * 50}px`;
+                    div.innerHTML = `
+                        P${block.processId}
+                        <span class="gantt-time">${block.startTime}</span>
+                    `;
+                    ganttChart.appendChild(div);
+                });
+
+                await new Promise(resolve => setTimeout(resolve, this.simulationSpeed));
+            }
+
+            displayResults() {
+                const resultsArea = document.getElementById('results');
+                const averagesArea = document.getElementById('averages');
+                
+                let tableHtml = `
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Process</th>
+                                <th>Arrival Time</th>
+                                <th>Burst Time</th>
+                                <th>Priority</th>
+                                <th>Completion Time</th>
+                                <th>Turnaround Time</th>
+                                <th>Waiting Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                let totalTurnaround = 0;
+                let totalWaiting = 0;
+
+                this.processes.forEach(p => {
+                    tableHtml += `
+                        <tr>
+                            <td>P${p.id}</td>
+                            <td>${p.arrivalTime}</td>
+                            <td>${p.burstTime}</td>
+                            <td>${p.priority}</td>
+                            <td>${p.completionTime}</td>
+                            <td>${p.turnaroundTime}</td>
+                            <td>${p.waitingTime}</td>
+                        </tr>
+                    `;
+                    totalTurnaround += p.turnaroundTime;
+                    totalWaiting += p.waitingTime;
+                });
+
+                tableHtml += '</tbody></table>';
+                resultsArea.innerHTML = tableHtml;
+
+                const avgTurnaround = totalTurnaround / this.processes.length;
+                const avgWaiting = totalWaiting / this.processes.length;
+
+                averagesArea.innerHTML = `
+                    <div class="col-md-6">
+                        <div class="metric-card">
+                            <h6>Average Waiting Time</h6>
+                            <h4>${avgWaiting.toFixed(2)}</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="metric-card">
+                            <h6>Average Turnaround Time</h6>
+                            <h4>${avgTurnaround.toFixed(2)}</h4>
+                        </div>
+                    </div>
+                `;
+            }
+
+            showError(message) {
+                const simulationArea = document.getElementById('simulation-area');
+                simulationArea.innerHTML = `
+                    <div class="alert alert-danger">
+                        ${message}
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize application
+        const scheduler = new Scheduler();
+
+        // Event Listeners
+        document.getElementById('algorithm').addEventListener('change', function() {
+            const configArea = document.getElementById('algorithmConfig');
+            configArea.innerHTML = this.value === 'rr' ? `
+                <div class="mb-3">
+                    <label class="form-label">Time Quantum</label>
+                    <input type="number" id="timeQuantum" class="form-control" min="1" value="2">
+                </div>
+            ` : '';
+        });
+
+        document.getElementById('generateInputs').addEventListener('click', function() {
+            const numProcesses = parseInt(document.getElementById('numProcesses').value);
+            
+            if (isNaN(numProcesses) || numProcesses < 1 || numProcesses > 10) {
+                alert('Please enter a valid number of processes (1-10)');
+                return;
+            }
+
+            const inputsDiv = document.getElementById('processInputs');
+            inputsDiv.innerHTML = '';
+            
+            for (let i = 0; i < numProcesses; i++) {
+                inputsDiv.innerHTML += `
+                    <div class="process-card card">
+                        <div class="card-body">
+                            <h6>Process ${i}</h6>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <input type="number" class="form-control burst-time" 
+                                           placeholder="Burst Time" min="1" value="${Math.floor(Math.random() * 10) + 1}">
+                                </div>
+                                <div class="col-4">
+                                    <input type="number" class="form-control arrival-time" 
+                                           placeholder="Arrival Time" min="0" value="${Math.floor(Math.random() * 5)}">
+                                </div>
+                                <div class="col-4">
+                                    <input type="number" class="form-control priority" 
+                                           placeholder="Priority" min="1" value="${Math.floor(Math.random() * 5) + 1}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        document.getElementById('runSimulation').addEventListener('click', async function() {
+            const algorithm = document.getElementById('algorithm').value;
+            
+            // Collect process data
+            scheduler.processes = [];
+            const processCards = document.querySelectorAll('.process-card');
+            
+            for (let i = 0; i < processCards.length; i++) {
+                const card = processCards[i];
+                const burstTime = parseInt(card.querySelector('.burst-time').value);
+                const arrivalTime = parseInt(card.querySelector('.arrival-time').value);
+                const priority = parseInt(card.querySelector('.priority').value);
+
+                if (isNaN(burstTime) || isNaN(arrivalTime) || isNaN(priority) ||
+                    burstTime <= 0 || arrivalTime < 0 || priority < 0) {
+                    alert('Please enter valid process values');
+                    return;
+                }
+
+                scheduler.processes.push(new Process(i, burstTime, arrivalTime, priority));
+            }
+
+            // Run simulation
+            const config = {};
+            if (algorithm === 'rr') {
+                config.timeQuantum = parseInt(document.getElementById('timeQuantum').value);
+                if (isNaN(config.timeQuantum) || config.timeQuantum <= 0) {
+                    alert('Please enter a valid time quantum');
+                    return;
+                }
+            }
+
+            await scheduler.run(algorithm, config);
+        });
+
+        // Initial process generation
+        document.getElementById('generateInputs').click();
+    </script>
+</body>
+</html>
